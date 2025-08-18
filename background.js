@@ -177,7 +177,7 @@ class GeminiNanoService {
     }
 
     // Fallback to LanguageModel
-    const prompt = `Please provide a concise summary of the following content. Focus on the main points and key information:\n\n${content}`;
+    const prompt = `Please provide a concise summary of the following content. Focus on the main points and key information. Please respond in the same language as the content (if content is in Turkish, respond in Turkish; if in English, respond in English; etc.):\n\n${content}`;
     return this.generateResponse(prompt);
   }
 

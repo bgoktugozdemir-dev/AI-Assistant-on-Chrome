@@ -317,20 +317,32 @@ class PopupController {
     try {
       this.setButtonLoading('summarizePage', true);
       
-      const response = await this.sendMessage({
-        action: 'summarizeContent',
-        content: this.currentPageContent
+      // Initialize streaming response UI
+      this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
+      
+      // Generate unique request ID
+      const requestId = 'summarize_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      
+      // Store stream info
+      this.activeStreams.set(requestId, {
+        containerId: 'pageResponse',
+        contentId: 'pageResponseContent',
+        buttonId: 'summarizePage'
       });
-
-      if (response.success) {
-        this.showResponse('pageResponse', 'pageResponseContent', response.summary);
-      } else {
-        this.showError(response.error || 'Failed to summarize page');
-      }
+      
+      // Create summarization prompt
+      const summarizePrompt = `Please provide a concise summary of the following content. Focus on the main points and key information. Please respond in the same language as the content (if content is in Turkish, respond in Turkish; if in English, respond in English; etc.):\n\n${this.currentPageContent}`;
+      
+      // Send streaming request
+      this.streamingPort.postMessage({
+        action: 'generateStreamingResponse',
+        prompt: summarizePrompt,
+        requestId: requestId
+      });
+      
     } catch (error) {
       console.error('Error summarizing page:', error);
       this.showError('An error occurred while summarizing the page.');
-    } finally {
       this.setButtonLoading('summarizePage', false);
     }
   }
