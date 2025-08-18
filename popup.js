@@ -1,4 +1,93 @@
 // Popup script for AI on Chrome extension
+
+// Lightweight Markdown renderer
+class MarkdownRenderer {
+  static render(text) {
+    if (!text) return '';
+    
+    let html = text;
+    
+    // Escape HTML first to prevent XSS
+    html = html.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#x27;');
+    
+    // Headers (must come before bold/italic)
+    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    
+    // Bold and italic
+    html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/\_\_\_(.*?)\_\_\_/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\_\_(.*?)\_\_/g, '<strong>$1</strong>');
+    html = html.replace(/\_(.*?)\_/g, '<em>$1</em>');
+    
+    // Code blocks (must come before inline code)
+    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+    
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    // Lists - process them more carefully
+    // First mark unordered list items
+    html = html.replace(/^[\*\-\+] (.+)$/gm, '<!UL!><li>$1</li>');
+    
+    // Then mark ordered list items  
+    html = html.replace(/^\d+\. (.+)$/gm, '<!OL!><li>$1</li>');
+    
+    // Wrap consecutive list items in proper tags
+    html = html.replace(/(<!UL!><li>.*?<\/li>(?:\n<!UL!><li>.*?<\/li>)*)/gs, (match) => {
+      return '<ul>' + match.replace(/<!UL!>/g, '') + '</ul>';
+    });
+    
+    html = html.replace(/(<!OL!><li>.*?<\/li>(?:\n<!OL!><li>.*?<\/li>)*)/gs, (match) => {
+      return '<ol>' + match.replace(/<!OL!>/g, '') + '</ol>';
+    });
+    
+    // Clean up any remaining markers
+    html = html.replace(/<!UL!>/g, '');
+    html = html.replace(/<!OL!>/g, '');
+    
+    // Blockquotes
+    html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+    
+    // Horizontal rules
+    html = html.replace(/^---$/gm, '<hr>');
+    html = html.replace(/^\*\*\*$/gm, '<hr>');
+    
+    // Line breaks (convert double newlines to paragraphs)
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = `<p>${html}</p>`;
+    
+    // Clean up empty paragraphs
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    
+    // Fix paragraphs around block elements
+    html = html.replace(/<p>(<h[1-6]>)/g, '$1');
+    html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ol>)/g, '$1');
+    html = html.replace(/(<\/ol>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<blockquote>)/g, '$1');
+    html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<pre>)/g, '$1');
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<hr>)<\/p>/g, '$1');
+    
+    return html;
+  }
+}
+
 class PopupController {
   constructor() {
     this.currentTab = 'prompt';
@@ -259,7 +348,12 @@ class PopupController {
     const container = document.getElementById(containerId);
     const contentElement = document.getElementById(contentId);
     
-    contentElement.textContent = content;
+    // Store original text for copying
+    contentElement.dataset.originalText = content;
+    
+    // Render markdown to HTML
+    const htmlContent = MarkdownRenderer.render(content);
+    contentElement.innerHTML = htmlContent;
     container.style.display = 'block';
     
     // Scroll to response
@@ -288,7 +382,8 @@ class PopupController {
   async copyToClipboard(elementId) {
     try {
       const element = document.getElementById(elementId);
-      const text = element.textContent;
+      // Get the original markdown text if available, otherwise use textContent
+      const text = element.dataset.originalText || element.textContent;
       
       await navigator.clipboard.writeText(text);
       
