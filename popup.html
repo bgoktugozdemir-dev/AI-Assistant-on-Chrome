@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI on Chrome</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>AI on Chrome</h1>
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Initializing...</span>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-button active" data-tab="prompt">AI Prompt</button>
+      <button class="tab-button" data-tab="page">Page AI</button>
+    </div>
+
+    <!-- AI Prompt Tab -->
+    <div class="tab-content active" id="promptTab">
+      <div class="input-section">
+        <textarea 
+          id="promptInput" 
+          placeholder="Ask me anything..." 
+          rows="3"
+        ></textarea>
+        <button id="sendPrompt" class="send-button">
+          <span class="button-text">Send</span>
+          <div class="loading-spinner" style="display: none;"></div>
+        </button>
+      </div>
+      
+      <div class="response-section">
+        <div id="promptResponse" class="response-box" style="display: none;">
+          <div class="response-header">
+            <span class="response-label">AI Response</span>
+            <button class="copy-button" id="copyPromptResponse" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="response-content" id="promptResponseContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page AI Tab -->
+    <div class="tab-content" id="pageTab">
+      <div class="page-info" id="pageInfo">
+        <div class="page-title" id="pageTitle">Current Page</div>
+        <div class="page-url" id="pageUrl"></div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="summarizePage" class="action-button">
+          <span class="button-text">Summarize Page</span>
+          <div class="loading-spinner" style="display: none;"></div>
+        </button>
+      </div>
+
+      <div class="input-section">
+        <textarea 
+          id="pageQuestion" 
+          placeholder="Ask a question about this page..." 
+          rows="2"
+        ></textarea>
+        <button id="askPageQuestion" class="send-button">
+          <span class="button-text">Ask</span>
+          <div class="loading-spinner" style="display: none;"></div>
+        </button>
+      </div>
+
+      <div class="response-section">
+        <div id="pageResponse" class="response-box" style="display: none;">
+          <div class="response-header">
+            <span class="response-label">AI Response</span>
+            <button class="copy-button" id="copyPageResponse" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="response-content" id="pageResponseContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="powered-by">Powered by Gemini Nano</div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
