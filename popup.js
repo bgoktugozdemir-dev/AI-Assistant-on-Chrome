@@ -93,13 +93,51 @@ class PopupController {
     this.currentTab = 'prompt';
     this.isInitialized = false;
     this.currentPageContent = '';
+    this.streamingPort = null;
+    this.activeStreams = new Map(); // Track active streaming requests
     this.init();
   }
 
   async init() {
     this.setupEventListeners();
+    this.setupStreaming();
     await this.initializeAI();
     await this.loadCurrentPageInfo();
+  }
+
+  setupStreaming() {
+    // Connect to background script for streaming
+    this.streamingPort = chrome.runtime.connect({ name: 'streaming' });
+    
+    this.streamingPort.onMessage.addListener((response) => {
+      if (response.requestId && this.activeStreams.has(response.requestId)) {
+        const streamInfo = this.activeStreams.get(response.requestId);
+        
+        if (response.success) {
+          this.handleStreamingChunk(
+            streamInfo.containerId,
+            streamInfo.contentId,
+            response.chunk,
+            response.isComplete
+          );
+          
+          if (response.isComplete) {
+            this.activeStreams.delete(response.requestId);
+            this.setButtonLoading(streamInfo.buttonId, false);
+          }
+        } else {
+          this.showError(response.error || 'Streaming failed');
+          this.activeStreams.delete(response.requestId);
+          this.setButtonLoading(streamInfo.buttonId, false);
+        }
+      }
+    });
+    
+    this.streamingPort.onDisconnect.addListener(() => {
+      console.log('Streaming port disconnected');
+      // Clean up active streams
+      this.activeStreams.clear();
+    });
   }
 
   setupEventListeners() {
@@ -236,21 +274,31 @@ class PopupController {
     try {
       this.setButtonLoading('sendPrompt', true);
       
-      const response = await this.sendMessage({
-        action: 'generateResponse',
-        prompt: prompt
+      // Initialize streaming response UI
+      this.initializeStreamingResponse('promptResponse', 'promptResponseContent');
+      
+      // Generate unique request ID
+      const requestId = 'prompt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      
+      // Store stream info
+      this.activeStreams.set(requestId, {
+        containerId: 'promptResponse',
+        contentId: 'promptResponseContent',
+        buttonId: 'sendPrompt'
       });
-
-      if (response.success) {
-        this.showResponse('promptResponse', 'promptResponseContent', response.response);
-        input.value = '';
-      } else {
-        this.showError(response.error || 'Failed to generate response');
-      }
+      
+      // Send streaming request
+      this.streamingPort.postMessage({
+        action: 'generateStreamingResponse',
+        prompt: prompt,
+        requestId: requestId
+      });
+      
+      input.value = '';
+      
     } catch (error) {
       console.error('Error handling prompt:', error);
       this.showError('An error occurred while processing your request.');
-    } finally {
       this.setButtonLoading('sendPrompt', false);
     }
   }
@@ -306,22 +354,32 @@ class PopupController {
     try {
       this.setButtonLoading('askPageQuestion', true);
       
-      const response = await this.sendMessage({
-        action: 'answerQuestion',
-        question: question,
-        context: this.currentPageContent
+      // Initialize streaming response UI
+      this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
+      
+      // Generate unique request ID
+      const requestId = 'question_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      
+      // Store stream info
+      this.activeStreams.set(requestId, {
+        containerId: 'pageResponse',
+        contentId: 'pageResponseContent',
+        buttonId: 'askPageQuestion'
       });
-
-      if (response.success) {
-        this.showResponse('pageResponse', 'pageResponseContent', response.answer);
-        input.value = '';
-      } else {
-        this.showError(response.error || 'Failed to answer question');
-      }
+      
+      // Send streaming request
+      this.streamingPort.postMessage({
+        action: 'generateStreamingResponse',
+        prompt: question,
+        context: this.currentPageContent,
+        requestId: requestId
+      });
+      
+      input.value = '';
+      
     } catch (error) {
       console.error('Error answering question:', error);
       this.showError('An error occurred while processing your question.');
-    } finally {
       this.setButtonLoading('askPageQuestion', false);
     }
   }
@@ -358,6 +416,72 @@ class PopupController {
     
     // Scroll to response
     container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  initializeStreamingResponse(containerId, contentId) {
+    const container = document.getElementById(containerId);
+    const contentElement = document.getElementById(contentId);
+    
+    // Clear previous content and show container
+    contentElement.innerHTML = '';
+    contentElement.dataset.originalText = '';
+    contentElement.dataset.streamingContent = '';
+    container.style.display = 'block';
+    
+    // Add streaming indicator
+    const streamingIndicator = document.createElement('div');
+    streamingIndicator.className = 'streaming-indicator';
+    streamingIndicator.innerHTML = '<div class="streaming-dots"><span></span><span></span><span></span></div><span>AI is generating response...</span>';
+    contentElement.appendChild(streamingIndicator);
+    
+    // Scroll to response
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  handleStreamingChunk(containerId, contentId, chunk, isComplete) {
+    const contentElement = document.getElementById(contentId);
+    
+    if (isComplete) {
+      // Remove streaming indicator
+      const indicator = contentElement.querySelector('.streaming-indicator');
+      if (indicator) {
+        indicator.remove();
+      }
+      
+      // Final render of complete content
+      const fullContent = contentElement.dataset.streamingContent || '';
+      contentElement.dataset.originalText = fullContent;
+      const htmlContent = MarkdownRenderer.render(fullContent);
+      contentElement.innerHTML = htmlContent;
+      return;
+    }
+    
+    if (chunk) {
+      // Accumulate streaming content
+      const currentContent = contentElement.dataset.streamingContent || '';
+      const newContent = currentContent + chunk;
+      contentElement.dataset.streamingContent = newContent;
+      
+      // Remove streaming indicator temporarily
+      const indicator = contentElement.querySelector('.streaming-indicator');
+      if (indicator) {
+        indicator.remove();
+      }
+      
+      // Render current content with markdown
+      const htmlContent = MarkdownRenderer.render(newContent);
+      contentElement.innerHTML = htmlContent;
+      
+      // Re-add streaming indicator
+      const streamingIndicator = document.createElement('div');
+      streamingIndicator.className = 'streaming-indicator';
+      streamingIndicator.innerHTML = '<div class="streaming-dots"><span></span><span></span><span></span></div><span>AI is generating response...</span>';
+      contentElement.appendChild(streamingIndicator);
+      
+      // Auto-scroll to keep indicator visible
+      const container = document.getElementById(containerId);
+      container.scrollTop = container.scrollHeight;
+    }
   }
 
   showError(message) {

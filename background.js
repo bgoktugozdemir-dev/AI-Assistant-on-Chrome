@@ -111,6 +111,48 @@ class GeminiNanoService {
     }
   }
 
+  async generateStreamingResponse(prompt, context = '', onChunk) {
+    if (!this.isInitialized) {
+      const result = await this.initialize();
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to initialize AI');
+      }
+    }
+
+    try {
+      const fullPrompt = context ? `Context: ${context}\n\nQuery: ${prompt}` : prompt;
+      
+      // Check if promptStreaming is available
+      if (typeof this.session.promptStreaming !== 'function') {
+        // Fallback to non-streaming
+        const response = await this.session.prompt(fullPrompt);
+        if (onChunk) onChunk(response, true); // Send complete response as final chunk
+        return response;
+      }
+
+      const stream = this.session.promptStreaming(fullPrompt);
+      let accumulatedResponse = '';
+      
+      for await (const chunk of stream) {
+        const newContent = chunk.replace(accumulatedResponse, '');
+        accumulatedResponse = chunk;
+        
+        if (newContent && onChunk) {
+          onChunk(newContent, false); // Send incremental chunk
+        }
+      }
+      
+      if (onChunk) {
+        onChunk('', true); // Signal completion
+      }
+      
+      return accumulatedResponse;
+    } catch (error) {
+      console.error('Error generating streaming response:', error);
+      throw error;
+    }
+  }
+
   async summarizeContent(content) {
     // Try to use the dedicated Summarizer API first
     if ('Summarizer' in globalThis) {
@@ -159,6 +201,64 @@ class GeminiNanoService {
 
 // Global service instance
 const geminiService = new GeminiNanoService();
+
+// Store active streaming ports
+const streamingPorts = new Map();
+
+// Handle port connections for streaming
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'streaming') {
+    port.onMessage.addListener(async (request) => {
+      if (request.action === 'generateStreamingResponse') {
+        const requestId = request.requestId;
+        streamingPorts.set(requestId, port);
+        
+        try {
+          const streamingCallback = (chunk, isComplete) => {
+            const activePort = streamingPorts.get(requestId);
+            if (activePort) {
+              activePort.postMessage({
+                success: true,
+                chunk,
+                isComplete,
+                requestId
+              });
+              
+              if (isComplete) {
+                streamingPorts.delete(requestId);
+              }
+            }
+          };
+          
+          await geminiService.generateStreamingResponse(
+            request.prompt, 
+            request.context, 
+            streamingCallback
+          );
+        } catch (error) {
+          const activePort = streamingPorts.get(requestId);
+          if (activePort) {
+            activePort.postMessage({
+              success: false,
+              error: error.message,
+              requestId
+            });
+            streamingPorts.delete(requestId);
+          }
+        }
+      }
+    });
+    
+    port.onDisconnect.addListener(() => {
+      // Clean up any streaming connections for this port
+      for (const [requestId, storedPort] of streamingPorts.entries()) {
+        if (storedPort === port) {
+          streamingPorts.delete(requestId);
+        }
+      }
+    });
+  }
+});
 
 // Message handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

@@ -462,3 +462,47 @@ footer {
   font-size: 14px;
   margin-bottom: 16px;
 }
+
+/* Streaming Indicators */
+.streaming-indicator {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  margin: 8px 0;
+  color: #202124;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.streaming-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.streaming-dots span {
+  width: 4px;
+  height: 4px;
+  background: #202124;
+  border-radius: 50%;
+  /* No animation at all - completely static */
+}
+
+/* Enhanced response content for streaming */
+.response-content {
+  position: relative;
+}
+
+.response-content .streaming-indicator {
+  position: sticky;
+  bottom: 0;
+  background: #f8f9fa;
+  border-top: 1px solid #e8eaed;
+  margin: 8px -16px -16px -16px;
+  padding: 12px 16px;
+  border-radius: 0 0 8px 8px;
+  font-style: italic;
+}
+
+/* No animation for streaming content - keep it static */
