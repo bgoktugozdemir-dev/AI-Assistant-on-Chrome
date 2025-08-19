@@ -1,20 +1,53 @@
 # AI on Chrome Extension
 
-A Chrome extension that integrates Gemini Nano for on-page AI analysis and general AI prompts.
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-blue?logo=google-chrome)](https://github.com/bgoktugozdemir/ai-on-chrome)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Chrome Version](https://img.shields.io/badge/Chrome-138%2B-green)](https://www.google.com/chrome/)
 
-## Features
+A powerful Chrome extension that brings AI assistance directly to your browser using Chrome's built-in Gemini Nano. Analyze web pages, summarize articles, and get AI-powered answers - all processed locally on your device for maximum privacy.
+
+![AI on Chrome Demo](https://via.placeholder.com/800x400?text=AI+on+Chrome+Extension+Demo)
+
+## ✨ What Makes This Special
+
+- **🔒 100% Private**: All AI processing happens locally - your data never leaves your device
+- **⚡ Lightning Fast**: Powered by Chrome's built-in Gemini Nano for instant responses
+- **🎯 Smart Content Analysis**: Intelligently extracts and analyzes main content from any webpage
+- **🌍 Multi-language Support**: Responds in the same language as the content you're analyzing
+- **🚀 Zero Setup**: No API keys, no accounts, no external services required
 
 ### 🧠 AI on Page
-- **Article Summarization**: Automatically extract and summarize the main content of any webpage
-- **Question & Answer**: Ask questions about the current page content and get AI-powered answers
-- **Content Analysis**: Intelligent analysis of articles, blog posts, and web content
+- **📝 Smart Summarization**: Instantly summarize articles, blog posts, and web content
+- **❓ Contextual Q&A**: Ask specific questions about the current page and get accurate answers
+- **🔍 Content Analysis**: Deep analysis of webpage content with intelligent filtering
+- **🌐 Language Detection**: Automatically responds in the same language as the source content
 
-### 💬 AI for Prompt
-- **General AI Assistant**: Ask any question and get responses powered by Gemini Nano
-- **Context-Aware Responses**: Get intelligent answers for general queries
-- **Easy Access**: Quick access via extension popup
+### 💬 AI Assistant
+- **🤖 General AI Chat**: Ask anything and get intelligent responses
+- **⚡ Streaming Responses**: Real-time response generation with live updates
+- **📋 Easy Copy**: One-click copying of AI responses
+- **🎨 Markdown Support**: Rich formatting in AI responses
 
-## Prerequisites
+## 🚀 Quick Start
+
+### 1. Install Chrome 138+
+Download the latest [Chrome browser](https://www.google.com/chrome/) (version 138 or newer) or [Chrome Canary](https://www.google.com/chrome/canary/).
+
+### 2. Install the Extension
+1. Download or clone this repository
+2. Open `chrome://extensions/` in Chrome
+3. Enable "Developer mode" (toggle in top right)
+4. Click "Load unpacked" and select the `ai-on-chrome` folder
+5. The extension will appear in your toolbar
+
+### 3. Verify Setup
+Click the extension icon - if you see "AI Ready" status, you're good to go! If not, see the [troubleshooting section](#troubleshooting).
+
+### 4. Start Using
+- **General AI**: Click the extension icon and ask any question
+- **Page Analysis**: Go to any article/blog, click the extension, switch to "Page AI" tab, and summarize or ask questions
+
+## 📋 Prerequisites
 
 ### Chrome Setup
 1. **Chrome 138+**: You need Chrome 138 or later (stable release) or Chrome Canary
@@ -159,14 +192,45 @@ ai-on-chrome/
 
 ## Contributing
 
-1. Fork the repository
-2. Make your changes
-3. Test thoroughly with Chrome Canary
-4. Submit a pull request
+We welcome contributions! Here's how to get started:
+
+1. **Fork the repository** on GitHub
+2. **Clone your fork** locally
+3. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+4. **Make your changes** and test thoroughly with Chrome 138+ or Chrome Canary
+5. **Commit your changes**: `git commit -m 'Add amazing feature'`
+6. **Push to your branch**: `git push origin feature/amazing-feature`
+7. **Submit a pull request**
+
+### Development Guidelines
+
+- Follow existing code style and patterns
+- Test all changes with the latest Chrome versions
+- Update documentation if needed
+- Ensure all console.log statements are commented out for production
+- Keep the extension lightweight and fast
+
+### Bug Reports & Feature Requests
+
+- Use GitHub Issues to report bugs or request features
+- Include Chrome version, OS, and detailed steps to reproduce
+- Check existing issues before creating new ones
+
+## Security & Privacy
+
+This extension prioritizes user privacy and security:
+
+- **Local Processing**: All AI operations happen locally using Chrome's built-in Gemini Nano
+- **No Data Transmission**: Your data never leaves your device
+- **Minimal Permissions**: Only requests necessary permissions for functionality
+- **Open Source**: Full source code is available for review
+- **No Analytics**: No tracking or analytics code included
 
 ## License
 
-MIT License - feel free to use and modify as needed.
+MIT License - see [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2024 Burak Göktuğ Özdemir
 
 ## Support
 

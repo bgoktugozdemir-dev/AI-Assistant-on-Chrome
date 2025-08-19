@@ -134,7 +134,7 @@ class PopupController {
     });
     
     this.streamingPort.onDisconnect.addListener(() => {
-      console.log('Streaming port disconnected');
+      // console.log('Streaming port disconnected');
       // Clean up active streams
       this.activeStreams.clear();
     });
@@ -219,7 +219,7 @@ class PopupController {
           // Auto-retry after 30 seconds
           setTimeout(() => {
             if (!this.isInitialized) {
-              console.log('Auto-retrying AI initialization...');
+              // console.log('Auto-retrying AI initialization...');
               this.initializeAI();
             }
           }, 30000);

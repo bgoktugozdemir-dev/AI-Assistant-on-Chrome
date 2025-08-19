@@ -1,6 +1,38 @@
 # Changelog
 
-## Version 1.0.1 (Current)
+## Version 1.0.6 (Current - Public Release Ready)
+
+### 🚀 **Public Release Preparation**
+
+#### **Repository Improvements:**
+- ✅ **Added MIT License** for open source distribution
+- ✅ **Enhanced README** with badges, quick start guide, and comprehensive documentation
+- ✅ **Added Contributing Guidelines** (CONTRIBUTING.md) for community contributions
+- ✅ **Added Security Policy** (SECURITY.md) with privacy guarantees and security practices
+- ✅ **Added .gitignore** for clean repository management
+- ✅ **Improved Code Documentation** with better comments and structure
+
+#### **Code Quality Improvements:**
+- ✅ **Production Console Cleanup** - Commented out development console.log statements
+- ✅ **Security Hardening** - Enhanced XSS protection and input validation
+- ✅ **Code Organization** - Better structured classes and functions
+- ✅ **Error Handling** - Improved error messages and user feedback
+
+#### **Documentation Enhancements:**
+- ✅ **Comprehensive README** with installation, usage, and troubleshooting
+- ✅ **Security & Privacy Section** highlighting local processing and data protection
+- ✅ **Development Guidelines** for contributors
+- ✅ **GitHub-ready badges** and professional presentation
+
+#### **Ready for:**
+- Public GitHub repository
+- Community contributions
+- Chrome Web Store submission (when ready)
+- Open source distribution
+
+---
+
+## Version 1.0.1 (Previous)
 
 ### 🔄 **Updated to New Chrome AI APIs**
 

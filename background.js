@@ -19,7 +19,7 @@ class GeminiNanoService {
 
       // Check availability
       const availability = await LanguageModel.availability();
-      console.log('Language model availability:', availability);
+      // console.log('Language model availability:', availability);
 
       if (availability === 'unavailable') {
         const message = 'Gemini Nano is not available on this device.';
@@ -34,7 +34,7 @@ class GeminiNanoService {
       }
 
       if (availability === 'downloadable') {
-        console.log('Gemini Nano needs to be downloaded. Creating session will trigger download...');
+        // console.log('Gemini Nano needs to be downloaded. Creating session will trigger download...');
       }
 
       // Create a session (this may trigger download if needed)
@@ -45,14 +45,14 @@ class GeminiNanoService {
           topK: params.defaultTopK,
           monitor(m) {
             m.addEventListener('downloadprogress', (e) => {
-              console.log(`Model download progress: ${Math.round(e.loaded * 100)}%`);
+              // console.log(`Model download progress: ${Math.round(e.loaded * 100)}%`);
             });
           }
         });
       } catch (sessionError) {
         if (sessionError.message?.includes('download') || sessionError.message?.includes('user activation')) {
           const message = 'Model is downloading or requires user interaction. Please try again.';
-          console.log(message);
+          // console.log(message);
           return { success: false, error: 'MODEL_DOWNLOADING', message };
         }
         throw sessionError;
@@ -64,15 +64,15 @@ class GeminiNanoService {
           const summarizerAvailability = await Summarizer.availability();
           if (summarizerAvailability !== 'unavailable') {
             // Don't create summarizer here, create it when needed to avoid user activation issues
-            console.log('Summarizer API is available');
+            // console.log('Summarizer API is available');
           }
         } catch (summarizerError) {
-          console.log('Summarizer API not available:', summarizerError.message);
+          // console.log('Summarizer API not available:', summarizerError.message);
         }
       }
 
       this.isInitialized = true;
-      console.log('AI services initialized successfully');
+      // console.log('AI services initialized successfully');
       return { success: true, message: 'AI is ready' };
 
     } catch (error) {
@@ -172,7 +172,7 @@ class GeminiNanoService {
           return summary;
         }
       } catch (summarizerError) {
-        console.log('Summarizer API failed, falling back to LanguageModel:', summarizerError.message);
+        // console.log('Summarizer API failed, falling back to LanguageModel:', summarizerError.message);
       }
     }
 
