@@ -213,9 +213,9 @@ class PopupController {
         let errorMessage = response.message || 'Gemini Nano is not available.';
         
         if (response.error === 'LANGUAGE_MODEL_NOT_AVAILABLE') {
-          errorMessage += '\n\n📋 Setup Steps:\n1. Use Chrome 138+ (stable) or Chrome Canary\n2. Enable flags (if needed):\n   - chrome://flags/#optimization-guide-on-device-model\n   - chrome://flags/#prompt-api-for-gemini-nano\n3. Restart Chrome after enabling flags';
+          errorMessage += '\n\n📋 Setup Steps:\n1. Update to Chrome 138+ or use Chrome Canary\n2. For older Chrome versions, enable flags:\n   - chrome://flags/#optimization-guide-on-device-model → "Enabled BypassPerfRequirement"\n   - chrome://flags/#prompt-api-for-gemini-nano → "Enabled"\n3. Restart Chrome completely after enabling flags\n4. Check chrome://settings/help for your version';
         } else if (response.error === 'MODEL_DOWNLOADING') {
-          errorMessage += '\n\n⏳ Please wait a few minutes for the download to complete, then try again.';
+          errorMessage += '\n\n⏳ Gemini Nano is downloading (5-15 minutes).\nThis happens automatically on first use.\nPlease wait and try again.';
           // Auto-retry after 30 seconds
           setTimeout(() => {
             if (!this.isInitialized) {
@@ -224,7 +224,7 @@ class PopupController {
             }
           }, 30000);
         } else if (response.error === 'MODEL_NOT_AVAILABLE') {
-          errorMessage += '\n\n💡 Your device may not support Gemini Nano, or the model is not available in your region.';
+          errorMessage += '\n\n💡 Possible causes:\n- Your device doesn\'t support Gemini Nano\n- Gemini Nano not available in your region\n- Try Chrome Canary if using stable Chrome\n- Check Chrome\'s AI requirements';
         }
         
         this.showError(errorMessage);

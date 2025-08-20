@@ -8,12 +8,17 @@
 - **Note**: Chrome 138+ includes built-in AI APIs
 
 ### Step 2: Enable AI Features (if needed)
+**For Chrome 138+**: AI should work by default, skip to Step 3.
+**For Chrome 127-137**: Enable these flags:
+
 1. Open Chrome
 2. Go to: `chrome://flags/#optimization-guide-on-device-model`
 3. Set to: **"Enabled BypassPerfRequirement"**
 4. Go to: `chrome://flags/#prompt-api-for-gemini-nano`  
 5. Set to: **"Enabled"**
-6. **Restart Chrome** (this is crucial!)
+6. **Restart Chrome completely** (this is crucial!)
+
+**If Chrome 138+ isn't working**: Try enabling the flags above.
 
 ### Step 3: Verify Setup
 1. Open Chrome DevTools (F12)
@@ -48,10 +53,11 @@ Run this diagnostic script in DevTools Console:
 6. Follow the recommendations shown
 
 ### Common Issues:
-- ❌ **Using old Chrome** → Update to Chrome 138+ or use Canary
-- ❌ **Flags not enabled** → Check both flags are set correctly
-- ❌ **Didn't restart Chrome** → Restart after enabling flags
-- ⏳ **Model downloading** → Wait 5-10 minutes, then try again
+- ❌ **Using old Chrome** → Update to Chrome 138+ or use [Chrome Canary](https://www.google.com/chrome/canary/)
+- ❌ **Flags not enabled** → Enable both flags and restart Chrome completely
+- ❌ **Didn't restart Chrome** → Must restart Chrome after enabling flags
+- ⏳ **Model downloading** → First use downloads Gemini Nano (5-15 minutes)
+- 🌍 **Regional limitations** → Some regions/devices don't support Gemini Nano yet
 
 ## ✅ Success Indicators
 

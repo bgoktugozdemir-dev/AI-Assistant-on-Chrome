@@ -51,12 +51,14 @@ Click the extension icon - if you see "AI Ready" status, you're good to go! If n
 
 ### Chrome Setup
 1. **Chrome 138+**: You need Chrome 138 or later (stable release) or Chrome Canary
-2. **Enable AI Features** (if needed): 
-   - Go to `chrome://flags/#optimization-guide-on-device-model`
-   - Set to "Enabled BypassPerfRequirement"
-   - Go to `chrome://flags/#prompt-api-for-gemini-nano`
-   - Set to "Enabled"
-   - Restart Chrome after enabling flags
+2. **Enable AI Features** (required for older Chrome versions): 
+   - **For Chrome 127-137**: Enable these flags:
+     - Go to `chrome://flags/#optimization-guide-on-device-model`
+     - Set to "Enabled BypassPerfRequirement"
+     - Go to `chrome://flags/#prompt-api-for-gemini-nano`
+     - Set to "Enabled"
+     - **Restart Chrome completely** after enabling flags
+   - **For Chrome 138+**: AI features should be available by default, but if not working, try the flags above
 
 ### Verify AI Availability
 1. Open Chrome DevTools (F12)
@@ -123,23 +125,86 @@ The extension intelligently extracts main content by:
 ### "AI is not initialized" Error
 This is the most common issue. Follow these steps:
 
+#### Step 1: Quick Diagnostic
 1. **Run the diagnostic script**:
    - Open Chrome DevTools (F12) 
    - Go to Console tab
    - Copy and paste the contents of `diagnose-setup.js`
    - Press Enter to run the diagnostic
 
-2. **Check your Chrome setup**:
-   - ✅ Use Chrome 138+ or Chrome Canary
-   - ✅ Enable required flags (if needed):
-     - `chrome://flags/#optimization-guide-on-device-model` → "Enabled BypassPerfRequirement"
-     - `chrome://flags/#prompt-api-for-gemini-nano` → "Enabled"
-   - ✅ Restart Chrome after enabling flags
+#### Step 2: Check Chrome Version & Setup
+2. **Verify Chrome version**:
+   - Go to `chrome://settings/help`
+   - **Required**: Chrome 138+ (stable) or Chrome Canary
+   - **Update if needed**: [Chrome](https://www.google.com/chrome/) or [Chrome Canary](https://www.google.com/chrome/canary/)
 
-3. **Verify AI availability**:
-   - Open DevTools Console
+3. **Enable AI flags** (if Chrome 127-137 or if 138+ isn't working):
+   - `chrome://flags/#optimization-guide-on-device-model` → "Enabled BypassPerfRequirement"
+   - `chrome://flags/#prompt-api-for-gemini-nano` → "Enabled"
+   - **Important**: Restart Chrome completely after enabling flags
+
+#### Step 3: Verify AI Status
+4. **Test AI availability**:
+   - Open DevTools Console (F12)
    - Run: `await LanguageModel.availability()`
-   - Should return: `"available"`, `"downloadable"`, or `"downloading"`
+   - **Expected results**:
+     - `"available"` ✅ Ready to use
+     - `"downloadable"` ⏳ Will download on first use
+     - `"downloading"` ⏳ Currently downloading (wait 5-15 minutes)
+     - `"unavailable"` ❌ Not supported on this device/region
+
+#### Step 4: Manual AI Test
+If the diagnostic script doesn't work, test AI manually:
+```javascript
+// Copy and paste this into DevTools Console (F12)
+(async () => {
+  console.log('🧪 Testing Chrome AI APIs...\n');
+  
+  // Check Chrome version
+  const chromeVersion = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1];
+  console.log(`Chrome Version: ${chromeVersion}`);
+  
+  if (chromeVersion < 138) {
+    console.log('⚠️ Chrome 138+ recommended for best AI support');
+  }
+  
+  // Test LanguageModel API
+  if ('LanguageModel' in window) {
+    console.log('✅ LanguageModel API found');
+    
+    try {
+      const availability = await LanguageModel.availability();
+      console.log(`AI Status: ${availability}`);
+      
+      if (availability === 'available') {
+        console.log('🎉 AI is ready! The extension should work.');
+        
+        // Quick test
+        try {
+          const session = await LanguageModel.create();
+          const response = await session.prompt('Say hello');
+          console.log(`Test response: ${response}`);
+          session.destroy();
+          console.log('✅ AI test successful!');
+        } catch (e) {
+          console.log(`❌ AI test failed: ${e.message}`);
+        }
+      } else if (availability === 'downloadable') {
+        console.log('⏳ AI will download on first use');
+      } else if (availability === 'downloading') {
+        console.log('⏳ AI is downloading... please wait');
+      } else {
+        console.log('❌ AI not available on this device');
+      }
+    } catch (e) {
+      console.log(`❌ AI check failed: ${e.message}`);
+    }
+  } else {
+    console.log('❌ LanguageModel API not found');
+    console.log('💡 Try enabling Chrome flags or updating Chrome');
+  }
+})();
+```
 
 ### Model Downloading
 - If you see "downloadable", the model will download automatically on first use
@@ -147,9 +212,28 @@ This is the most common issue. Follow these steps:
 - Try using the extension again after download
 
 ### AI Not Available
-- Ensure you're using Chrome 138+ or Chrome Canary
-- Some devices/regions may not support Gemini Nano
-- Check Chrome's AI availability for your device
+- **Chrome Version**: Ensure you're using Chrome 138+ or Chrome Canary
+- **Device Limitations**: Some older or low-powered devices may not support Gemini Nano
+- **Regional Availability**: Gemini Nano may not be available in all countries/regions yet
+- **Hardware Requirements**: Check if your device meets Chrome's AI hardware requirements
+- **Alternative**: Try Chrome Canary if stable Chrome doesn't work
+
+### Device & Regional Compatibility
+**Supported Devices:**
+- Most modern desktops and laptops (Windows, macOS, Linux)
+- Devices with sufficient RAM (typically 4GB+)
+- Chrome 138+ or Chrome Canary
+
+**Known Limitations:**
+- Some ARM-based devices may have limited support
+- Very old hardware may not support the AI models
+- Corporate or managed Chrome installations may have restrictions
+- Some regions may have delayed rollout of AI features
+
+**If AI is unavailable on your device:**
+1. Try Chrome Canary (often has broader device support)
+2. Check Chrome's official AI documentation for device requirements
+3. Ensure your Chrome installation isn't managed/restricted by IT policies
 
 ### Content Not Extracting
 - Refresh the page and try again
