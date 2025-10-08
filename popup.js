@@ -107,37 +107,56 @@ class PopupController {
 
   setupStreaming() {
     // Connect to background script for streaming
-    this.streamingPort = chrome.runtime.connect({ name: 'streaming' });
-    
-    this.streamingPort.onMessage.addListener((response) => {
-      if (response.requestId && this.activeStreams.has(response.requestId)) {
-        const streamInfo = this.activeStreams.get(response.requestId);
-        
-        if (response.success) {
-          this.handleStreamingChunk(
-            streamInfo.containerId,
-            streamInfo.contentId,
-            response.chunk,
-            response.isComplete
-          );
+    try {
+      this.streamingPort = chrome.runtime.connect({ name: 'streaming' });
+      
+      this.streamingPort.onMessage.addListener((response) => {
+        if (response.requestId && this.activeStreams.has(response.requestId)) {
+          const streamInfo = this.activeStreams.get(response.requestId);
           
-          if (response.isComplete) {
+          if (response.success) {
+            this.handleStreamingChunk(
+              streamInfo.containerId,
+              streamInfo.contentId,
+              response.chunk,
+              response.isComplete
+            );
+            
+            if (response.isComplete) {
+              this.activeStreams.delete(response.requestId);
+              this.setButtonLoading(streamInfo.buttonId, false);
+            }
+          } else {
+            const errorMsg = response.error || 'Streaming failed';
+            console.error('Streaming error:', errorMsg);
+            this.showError(errorMsg);
             this.activeStreams.delete(response.requestId);
             this.setButtonLoading(streamInfo.buttonId, false);
           }
-        } else {
-          this.showError(response.error || 'Streaming failed');
-          this.activeStreams.delete(response.requestId);
-          this.setButtonLoading(streamInfo.buttonId, false);
         }
-      }
-    });
-    
-    this.streamingPort.onDisconnect.addListener(() => {
-      // console.log('Streaming port disconnected');
-      // Clean up active streams
-      this.activeStreams.clear();
-    });
+      });
+      
+      this.streamingPort.onDisconnect.addListener(() => {
+        console.log('Streaming port disconnected');
+        // Clean up active streams
+        this.activeStreams.clear();
+        
+        // Try to reconnect after a short delay
+        setTimeout(() => {
+          if (this.isInitialized) {
+            console.log('Attempting to reconnect streaming port...');
+            try {
+              this.streamingPort = chrome.runtime.connect({ name: 'streaming' });
+            } catch (reconnectError) {
+              console.error('Failed to reconnect streaming port:', reconnectError);
+            }
+          }
+        }, 1000);
+      });
+    } catch (error) {
+      console.error('Failed to setup streaming:', error);
+      this.showError('Failed to setup streaming connection. Please reload the extension.');
+    }
   }
 
   setupEventListeners() {
@@ -203,14 +222,33 @@ class PopupController {
       
       const response = await this.sendMessage({ action: 'initialize' });
       
+      // Log response for debugging
+      console.log('AI Initialization response:', response);
+      
+      // Check if response exists
+      if (!response) {
+        console.error('No response received from background script');
+        this.updateStatus('AI Error', 'error');
+        this.showError('No response from AI service. Please reload the extension.');
+        return;
+      }
+      
       if (response.success) {
         this.isInitialized = true;
         this.updateStatus('AI Ready', 'ready');
+        console.log('AI initialized successfully');
       } else {
         this.updateStatus('AI Unavailable', 'error');
         
         // Show specific error message based on error type
         let errorMessage = response.message || 'Gemini Nano is not available.';
+        
+        // Log detailed error info
+        console.error('AI Initialization failed:', {
+          error: response.error,
+          message: response.message,
+          details: response.details
+        });
         
         if (response.error === 'LANGUAGE_MODEL_NOT_AVAILABLE') {
           errorMessage += '\n\n📋 Setup Steps:\n1. Update to Chrome 138+ or use Chrome Canary\n2. For older Chrome versions, enable flags:\n   - chrome://flags/#optimization-guide-on-device-model → "Enabled BypassPerfRequirement"\n   - chrome://flags/#prompt-api-for-gemini-nano → "Enabled"\n3. Restart Chrome completely after enabling flags\n4. Check chrome://settings/help for your version';
@@ -219,12 +257,17 @@ class PopupController {
           // Auto-retry after 30 seconds
           setTimeout(() => {
             if (!this.isInitialized) {
-              // console.log('Auto-retrying AI initialization...');
+              console.log('Auto-retrying AI initialization...');
               this.initializeAI();
             }
           }, 30000);
         } else if (response.error === 'MODEL_NOT_AVAILABLE') {
           errorMessage += '\n\n💡 Possible causes:\n- Your device doesn\'t support Gemini Nano\n- Gemini Nano not available in your region\n- Try Chrome Canary if using stable Chrome\n- Check Chrome\'s AI requirements';
+        } else if (response.error === 'INITIALIZATION_FAILED') {
+          // Add details if available
+          if (response.details) {
+            errorMessage += '\n\n🔍 Details: ' + response.details;
+          }
         }
         
         this.showError(errorMessage);
@@ -232,7 +275,15 @@ class PopupController {
     } catch (error) {
       console.error('Failed to initialize AI:', error);
       this.updateStatus('AI Error', 'error');
-      this.showError('Failed to initialize AI. Please try reloading the extension or check the console for details.');
+      
+      // More detailed error message
+      let errorMsg = 'Failed to initialize AI. ';
+      if (error && error.message) {
+        errorMsg += error.message + ' ';
+      }
+      errorMsg += 'Please try reloading the extension or check the console for details.';
+      
+      this.showError(errorMsg);
     }
   }
 
@@ -240,23 +291,74 @@ class PopupController {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (tab) {
-        document.getElementById('pageTitle').textContent = tab.title || 'Untitled';
-        document.getElementById('pageUrl').textContent = tab.url || '';
+      if (!tab) {
+        console.warn('No active tab found');
+        document.getElementById('pageTitle').textContent = 'No active tab';
+        document.getElementById('pageUrl').textContent = 'Please open a webpage';
+        return;
+      }
 
-        // Get page content
+      // Set basic tab info
+      document.getElementById('pageTitle').textContent = tab.title || 'Untitled';
+      document.getElementById('pageUrl').textContent = tab.url || '';
+
+      // Check if URL is accessible (not chrome:// or other restricted URLs)
+      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || 
+          tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
+        console.log('Cannot access restricted URL:', tab.url);
+        this.currentPageContent = '';
+        return;
+      }
+
+      try {
+        // Try to get page content from content script
         const response = await chrome.tabs.sendMessage(tab.id, { 
           action: 'getPageContent' 
         });
         
         if (response && response.success) {
           this.currentPageContent = response.content;
+          console.log('Page content loaded successfully, length:', this.currentPageContent.length);
+        } else {
+          console.warn('Content script returned unsuccessful response:', response);
+          this.currentPageContent = '';
+        }
+      } catch (contentScriptError) {
+        // Content script not loaded, try to inject it
+        console.log('Content script not found, attempting to inject...', contentScriptError.message);
+        
+        try {
+          // Inject content script
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          });
+          
+          // Wait a bit for the script to initialize
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Try again to get content
+          const retryResponse = await chrome.tabs.sendMessage(tab.id, { 
+            action: 'getPageContent' 
+          });
+          
+          if (retryResponse && retryResponse.success) {
+            this.currentPageContent = retryResponse.content;
+            console.log('Page content loaded after injection, length:', this.currentPageContent.length);
+          } else {
+            console.warn('Failed to get content even after injection');
+            this.currentPageContent = '';
+          }
+        } catch (injectError) {
+          console.error('Failed to inject content script:', injectError);
+          this.currentPageContent = '';
+          // Don't show error to user, just log it
         }
       }
     } catch (error) {
       console.error('Failed to load page info:', error);
       document.getElementById('pageTitle').textContent = 'Unable to access page';
-      document.getElementById('pageUrl').textContent = 'Content script may not be loaded';
+      document.getElementById('pageUrl').textContent = error.message || 'Unknown error';
     }
   }
 
@@ -309,8 +411,8 @@ class PopupController {
       return;
     }
 
-    if (!this.currentPageContent) {
-      this.showError('Unable to access page content. Please refresh the page and try again.');
+    if (!this.currentPageContent || this.currentPageContent.trim().length === 0) {
+      this.showError('Unable to access page content. Please refresh the page and try again, or check if you are on a restricted page (chrome://, etc.).');
       return;
     }
 
@@ -333,6 +435,8 @@ class PopupController {
       // Create summarization prompt
       const summarizePrompt = `Please provide a concise summary of the following content. Focus on the main points and key information. Please respond in the same language as the content (if content is in Turkish, respond in Turkish; if in English, respond in English; etc.):\n\n${this.currentPageContent}`;
       
+      console.log('Sending summarize request, content length:', this.currentPageContent.length);
+      
       // Send streaming request
       this.streamingPort.postMessage({
         action: 'generateStreamingResponse',
@@ -342,7 +446,7 @@ class PopupController {
       
     } catch (error) {
       console.error('Error summarizing page:', error);
-      this.showError('An error occurred while summarizing the page.');
+      this.showError('An error occurred while summarizing the page. ' + (error.message || ''));
       this.setButtonLoading('summarizePage', false);
     }
   }
@@ -358,8 +462,8 @@ class PopupController {
       return;
     }
 
-    if (!this.currentPageContent) {
-      this.showError('Unable to access page content. Please refresh the page and try again.');
+    if (!this.currentPageContent || this.currentPageContent.trim().length === 0) {
+      this.showError('Unable to access page content. Please refresh the page and try again, or check if you are on a restricted page (chrome://, etc.).');
       return;
     }
 
@@ -379,6 +483,8 @@ class PopupController {
         buttonId: 'askPageQuestion'
       });
       
+      console.log('Sending page question, content length:', this.currentPageContent.length);
+      
       // Send streaming request
       this.streamingPort.postMessage({
         action: 'generateStreamingResponse',
@@ -391,7 +497,7 @@ class PopupController {
       
     } catch (error) {
       console.error('Error answering question:', error);
-      this.showError('An error occurred while processing your question.');
+      this.showError('An error occurred while processing your question. ' + (error.message || ''));
       this.setButtonLoading('askPageQuestion', false);
     }
   }
@@ -502,17 +608,28 @@ class PopupController {
     
     const errorDiv = document.createElement('div');
     errorDiv.className = 'error-message';
+    
+    // Handle multi-line error messages
+    if (message.includes('\n')) {
+      errorDiv.style.whiteSpace = 'pre-wrap';
+    }
+    
     errorDiv.textContent = message;
     
     const activeTab = document.querySelector('.tab-content.active');
-    activeTab.insertBefore(errorDiv, activeTab.firstChild);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      if (errorDiv.parentNode) {
-        errorDiv.remove();
-      }
-    }, 5000);
+    if (activeTab) {
+      activeTab.insertBefore(errorDiv, activeTab.firstChild);
+      
+      // Auto remove after 10 seconds for longer messages, 5 seconds for short ones
+      const timeout = message.length > 100 ? 10000 : 5000;
+      setTimeout(() => {
+        if (errorDiv.parentNode) {
+          errorDiv.remove();
+        }
+      }, timeout);
+    } else {
+      console.error('Error message:', message);
+    }
   }
 
   async copyToClipboard(elementId) {
@@ -543,8 +660,29 @@ class PopupController {
   }
 
   sendMessage(message) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(message, resolve);
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          // Check for runtime errors
+          if (chrome.runtime.lastError) {
+            console.error('Runtime error:', chrome.runtime.lastError);
+            reject(new Error(chrome.runtime.lastError.message || 'Communication error'));
+            return;
+          }
+          
+          // Check if response is valid
+          if (response === undefined) {
+            console.error('Undefined response received');
+            reject(new Error('No response from background script'));
+            return;
+          }
+          
+          resolve(response);
+        });
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        reject(error);
+      }
     });
   }
 }

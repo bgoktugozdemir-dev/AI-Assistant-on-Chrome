@@ -41,11 +41,11 @@ class GeminiNanoService {
       try {
         let temperature = 0.8;
         let topK = 3;
-        
+
         try {
           const params = await LanguageModel.params();
           console.log('LanguageModel params:', params);
-          
+
           // Validate and clamp parameters to safe values
           if (params.defaultTemperature && params.maxTemperature) {
             temperature = Math.max(
@@ -56,7 +56,7 @@ class GeminiNanoService {
               )
             );
           }
-          
+
           // topK must be a positive integer, typically between 1 and 40
           if (typeof params.defaultTopK === 'number' && !isNaN(params.defaultTopK) && params.defaultTopK >= 1) {
             topK = Math.max(1, Math.min(Math.floor(params.defaultTopK), 40));
@@ -66,9 +66,9 @@ class GeminiNanoService {
         } catch (paramsError) {
           console.warn('Failed to get model params, using safe defaults:', paramsError.message);
         }
-        
+
         console.log('Creating session with temperature:', temperature, 'topK:', topK);
-        
+
         this.session = await LanguageModel.create({
           temperature: temperature,
           topK: topK,
@@ -78,7 +78,7 @@ class GeminiNanoService {
             });
           }
         });
-        
+
         console.log('Session created successfully');
       } catch (sessionError) {
         console.error('Session creation error:', sessionError);
@@ -110,7 +110,7 @@ class GeminiNanoService {
     } catch (error) {
       console.error('Failed to initialize AI:', error);
       let message = 'Failed to initialize AI. ';
-      
+
       if (error.message?.includes('not supported')) {
         message += 'AI features are not supported on this device.';
       } else if (error.message?.includes('download')) {
@@ -120,7 +120,7 @@ class GeminiNanoService {
       } else {
         message += 'Please check your Chrome version (138+) and try again.';
       }
-      
+
       return { success: false, error: 'INITIALIZATION_FAILED', message, details: error.message };
     }
   }
@@ -151,33 +151,58 @@ class GeminiNanoService {
       }
     }
 
+    if (!this.session) {
+      throw new Error('AI session is not available. Please reinitialize the extension.');
+    }
+
     try {
       const fullPrompt = context ? `Context: ${context}\n\nQuery: ${prompt}` : prompt;
-      
+
       // Check if promptStreaming is available
       if (typeof this.session.promptStreaming !== 'function') {
         // Fallback to non-streaming
+        if (typeof this.session.prompt !== 'function') {
+          throw new Error('Neither prompt nor promptStreaming methods are available.');
+        }
+
         const response = await this.session.prompt(fullPrompt);
-        if (onChunk) onChunk(response, true); // Send complete response as final chunk
+
+        // Send response in chunks to simulate streaming for consistent UI behavior
+        if (onChunk) {
+          // Split response into words for smoother display
+          const words = response.split(' ');
+          let accumulated = '';
+
+          for (let i = 0; i < words.length; i++) {
+            const word = words[i] + (i < words.length - 1 ? ' ' : '');
+            accumulated += word;
+            onChunk(word, false);
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+
+          onChunk('', true); // Signal completion
+        }
+
         return response;
       }
 
       const stream = this.session.promptStreaming(fullPrompt);
       let accumulatedResponse = '';
-      
+
       for await (const chunk of stream) {
         const newContent = chunk.replace(accumulatedResponse, '');
         accumulatedResponse = chunk;
-        
+
         if (newContent && onChunk) {
           onChunk(newContent, false); // Send incremental chunk
         }
       }
-      
+
       if (onChunk) {
         onChunk('', true); // Signal completion
       }
-      
+
       return accumulatedResponse;
     } catch (error) {
       console.error('Error generating streaming response:', error);
@@ -197,7 +222,7 @@ class GeminiNanoService {
             format: 'markdown',
             length: 'medium'
           });
-          
+
           // Clean content by removing HTML tags and extra whitespace
           const cleanContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
           const summary = await summarizer.summarize(cleanContent);
@@ -244,43 +269,53 @@ chrome.runtime.onConnect.addListener((port) => {
       if (request.action === 'generateStreamingResponse') {
         const requestId = request.requestId;
         streamingPorts.set(requestId, port);
-        
+
         try {
           const streamingCallback = (chunk, isComplete) => {
             const activePort = streamingPorts.get(requestId);
             if (activePort) {
-              activePort.postMessage({
-                success: true,
-                chunk,
-                isComplete,
-                requestId
-              });
-              
-              if (isComplete) {
+              try {
+                activePort.postMessage({
+                  success: true,
+                  chunk,
+                  isComplete,
+                  requestId
+                });
+
+                if (isComplete) {
+                  streamingPorts.delete(requestId);
+                }
+              } catch (postError) {
+                console.error('Error posting message to port:', postError);
                 streamingPorts.delete(requestId);
               }
             }
           };
-          
+
           await geminiService.generateStreamingResponse(
-            request.prompt, 
-            request.context, 
+            request.prompt,
+            request.context || '',
             streamingCallback
           );
         } catch (error) {
+          console.error('Streaming error:', error);
           const activePort = streamingPorts.get(requestId);
           if (activePort) {
-            activePort.postMessage({
-              success: false,
-              error: error.message,
-              requestId
-            });
+            try {
+              activePort.postMessage({
+                success: false,
+                error: error.message || 'Unknown error - check Chrome version and AI availability',
+                requestId
+              });
+            } catch (postError) {
+              console.error('Error posting error message to port:', postError);
+            }
             streamingPorts.delete(requestId);
           }
         }
       }
     });
-    
+
     port.onDisconnect.addListener(() => {
       // Clean up any streaming connections for this port
       for (const [requestId, storedPort] of streamingPorts.entries()) {
@@ -296,33 +331,71 @@ chrome.runtime.onConnect.addListener((port) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handleAsync = async () => {
     try {
+      // Validate request
+      if (!request || !request.action) {
+        console.error('Invalid request:', request);
+        return { success: false, error: 'INVALID_REQUEST', message: 'Invalid request format' };
+      }
+
+      console.log('Handling request:', request.action);
+
       switch (request.action) {
         case 'initialize':
           const result = await geminiService.initialize();
+          console.log('Initialize result:', result);
           return result;
 
         case 'generateResponse':
-          const response = await geminiService.generateResponse(request.prompt, request.context);
+          if (!request.prompt) {
+            return { success: false, error: 'MISSING_PROMPT', message: 'Prompt is required' };
+          }
+          const response = await geminiService.generateResponse(request.prompt, request.context || '');
           return { success: true, response };
 
         case 'summarizeContent':
+          if (!request.content) {
+            return { success: false, error: 'MISSING_CONTENT', message: 'Content is required' };
+          }
           const summary = await geminiService.summarizeContent(request.content);
           return { success: true, summary };
 
         case 'answerQuestion':
+          if (!request.question || !request.context) {
+            return { success: false, error: 'MISSING_PARAMETERS', message: 'Question and context are required' };
+          }
           const answer = await geminiService.answerQuestion(request.question, request.context);
           return { success: true, answer };
 
         default:
-          return { success: false, error: 'Unknown action' };
+          console.error('Unknown action:', request.action);
+          return { success: false, error: 'UNKNOWN_ACTION', message: `Unknown action: ${request.action}` };
       }
     } catch (error) {
       console.error('Background script error:', error);
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: 'BACKGROUND_ERROR',
+        message: error.message || 'An error occurred in the background script',
+        details: error.stack
+      };
     }
   };
 
-  handleAsync().then(sendResponse);
+  handleAsync()
+    .then(response => {
+      console.log('Sending response:', response);
+      sendResponse(response);
+    })
+    .catch(error => {
+      console.error('Failed to handle request:', error);
+      sendResponse({
+        success: false,
+        error: 'HANDLER_ERROR',
+        message: 'Failed to process request',
+        details: error.message
+      });
+    });
+
   return true; // Keep message channel open for async response
 });
 
