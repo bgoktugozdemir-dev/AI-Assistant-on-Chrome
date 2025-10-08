@@ -132,21 +132,55 @@ class PopupController {
           const streamInfo = this.activeStreams.get(response.requestId);
           
           if (response.success) {
-            this.handleStreamingChunk(
-              streamInfo.containerId,
-              streamInfo.contentId,
-              response.chunk,
-              response.isComplete
-            );
+            // Accumulate response
+            streamInfo.accumulatedResponse += response.chunk || '';
+            
+            // Remove streaming indicator and update message
+            const tabName = streamInfo.tabName;
+            const messageId = `stream_${response.requestId}`;
+            
+            // Get container
+            const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+            const container = document.getElementById(containerId);
             
             if (response.isComplete) {
+              // Remove streaming indicator
+              const indicator = container.querySelector('[data-streaming="true"]');
+              if (indicator) {
+                indicator.remove();
+              }
+              
+              // Add final message
+              this.addMessageToChat(tabName, streamInfo.accumulatedResponse, false, messageId);
+              
+              // Save to conversation
+              const conv = this.getActiveConversation(tabName);
+              if (conv && conv.messages[streamInfo.messageIndex]) {
+                conv.messages[streamInfo.messageIndex].response = streamInfo.accumulatedResponse;
+                conv.updatedAt = new Date().toISOString();
+                this.saveConversationHistory();
+              }
+              
+              // Clean up
               this.activeStreams.delete(response.requestId);
               this.setButtonLoading(streamInfo.buttonId, false);
+            } else {
+              // Update streaming message
+              this.updateStreamingMessage(tabName, messageId, streamInfo.accumulatedResponse);
             }
           } else {
             const errorMsg = response.error || 'Streaming failed';
             console.error('Streaming error:', errorMsg);
             this.showError(errorMsg);
+            
+            // Remove streaming indicator
+            const containerId = streamInfo.tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+            const container = document.getElementById(containerId);
+            const indicator = container.querySelector('[data-streaming="true"]');
+            if (indicator) {
+              indicator.remove();
+            }
+            
             this.activeStreams.delete(response.requestId);
             this.setButtonLoading(streamInfo.buttonId, false);
           }
@@ -208,22 +242,6 @@ class PopupController {
       }
     });
 
-    // Copy buttons
-    document.getElementById('copyPromptResponse').addEventListener('click', () => {
-      this.copyToClipboard('promptResponseContent');
-    });
-    document.getElementById('copyPageResponse').addEventListener('click', () => {
-      this.copyToClipboard('pageResponseContent');
-    });
-
-    // Clear buttons
-    document.getElementById('clearPromptResponse').addEventListener('click', () => {
-      this.clearConversation('prompt');
-    });
-    document.getElementById('clearPageResponse').addEventListener('click', () => {
-      this.clearConversation('page');
-    });
-
     // New chat buttons
     document.getElementById('newPromptChat').addEventListener('click', () => {
       this.startNewConversation('prompt');
@@ -251,6 +269,178 @@ class PopupController {
     document.getElementById('newPageChat').style.display = tabName === 'page' ? 'flex' : 'none';
 
     this.currentTab = tabName;
+  }
+
+  /**
+   * Add a message to the chat container
+   * @param {string} tabName - 'prompt' or 'page'
+   * @param {string} message - Message text
+   * @param {boolean} isUser - true for user message, false for AI message
+   * @param {string} messageId - Optional unique ID for the message
+   */
+  addMessageToChat(tabName, message, isUser, messageId = null) {
+    const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+      console.error('Chat container not found:', containerId);
+      return null;
+    }
+
+    // Create message element
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${isUser ? 'user-message' : 'ai-message'}`;
+    if (messageId) {
+      messageDiv.dataset.messageId = messageId;
+    }
+
+    // Create message bubble
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    
+    if (isUser) {
+      // User messages are plain text
+      bubble.textContent = message;
+    } else {
+      // AI messages support markdown
+      bubble.innerHTML = MarkdownRenderer.render(message);
+    }
+
+    messageDiv.appendChild(bubble);
+
+    // Add message actions for AI messages
+    if (!isUser) {
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'message-actions';
+      
+      // Copy button
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'message-action-button';
+      copyBtn.title = 'Copy message';
+      copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>`;
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(message).then(() => {
+          copyBtn.title = 'Copied!';
+          setTimeout(() => { copyBtn.title = 'Copy message'; }, 2000);
+        });
+      });
+      
+      actionsDiv.appendChild(copyBtn);
+      messageDiv.appendChild(actionsDiv);
+    }
+
+    // Append to container
+    container.appendChild(messageDiv);
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+
+    return messageDiv;
+  }
+
+  /**
+   * Clear all messages in a chat container
+   */
+  clearChatContainer(tabName) {
+    const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = '';
+    }
+  }
+
+  /**
+   * Add streaming indicator to chat
+   */
+  addStreamingIndicator(tabName) {
+    const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+    const container = document.getElementById(containerId);
+    
+    if (!container) return null;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'chat-message ai-message';
+    indicator.dataset.streaming = 'true';
+    
+    indicator.innerHTML = `
+      <div class="streaming-indicator">
+        <div class="streaming-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <span>AI is thinking...</span>
+      </div>
+    `;
+    
+    container.appendChild(indicator);
+    container.scrollTop = container.scrollHeight;
+    
+    return indicator;
+  }
+
+  /**
+   * Replace streaming indicator with actual message
+   */
+  replaceStreamingIndicator(tabName, message) {
+    const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+    const container = document.getElementById(containerId);
+    
+    if (!container) return null;
+
+    // Remove streaming indicator
+    const indicator = container.querySelector('[data-streaming="true"]');
+    if (indicator) {
+      indicator.remove();
+    }
+
+    // Add actual message
+    return this.addMessageToChat(tabName, message, false);
+  }
+
+  /**
+   * Update a message being streamed
+   */
+  updateStreamingMessage(tabName, messageId, content) {
+    const containerId = tabName === 'prompt' ? 'promptChatContainer' : 'pageChatContainer';
+    const container = document.getElementById(containerId);
+    
+    if (!container) return;
+
+    // Remove streaming indicator if it exists
+    const indicator = container.querySelector('[data-streaming="true"]');
+    if (indicator) {
+      indicator.remove();
+    }
+
+    let messageDiv = container.querySelector(`[data-message-id="${messageId}"]`);
+    
+    if (!messageDiv) {
+      // Create new AI message
+      messageDiv = document.createElement('div');
+      messageDiv.className = 'chat-message ai-message';
+      messageDiv.dataset.messageId = messageId;
+      messageDiv.dataset.streaming = 'active';
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.innerHTML = MarkdownRenderer.render(content);
+      
+      messageDiv.appendChild(bubble);
+      container.appendChild(messageDiv);
+    } else {
+      // Update existing message
+      const bubble = messageDiv.querySelector('.message-bubble');
+      if (bubble) {
+        bubble.innerHTML = MarkdownRenderer.render(content);
+      }
+    }
+
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
   }
 
   async initializeAI() {
@@ -419,26 +609,31 @@ class PopupController {
         this.createNewConversation('prompt');
       }
       
+      // Add user message to chat UI
+      this.addMessageToChat('prompt', prompt, true);
+      
+      // Add streaming indicator
+      this.addStreamingIndicator('prompt');
+      
       // Save prompt to active conversation
       const conv = this.getActiveConversation('prompt');
+      const messageIndex = conv.messages.length;
       conv.messages.push({
         prompt: prompt,
-        response: null,
+        response: '',
         timestamp: new Date().toISOString()
       });
       conv.updatedAt = new Date().toISOString();
-      
-      // Initialize streaming response UI
-      this.initializeStreamingResponse('promptResponse', 'promptResponseContent');
       
       // Generate unique request ID
       const requestId = 'prompt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
       
       // Store stream info
       this.activeStreams.set(requestId, {
-        containerId: 'promptResponse',
-        contentId: 'promptResponseContent',
-        buttonId: 'sendPrompt'
+        tabName: 'prompt',
+        messageIndex: messageIndex,
+        buttonId: 'sendPrompt',
+        accumulatedResponse: ''
       });
       
       // Send streaming request
@@ -477,27 +672,32 @@ class PopupController {
         this.createNewConversation('page');
       }
       
+      // Add user action message to chat UI
+      this.addMessageToChat('page', '📄 Summarize this page', true);
+      
+      // Add streaming indicator
+      this.addStreamingIndicator('page');
+      
       // Save to active conversation
       const conv = this.getActiveConversation('page');
+      const messageIndex = conv.messages.length;
       conv.messages.push({
         type: 'summarize',
         prompt: 'Summarize page',
-        response: null,
+        response: '',
         timestamp: new Date().toISOString()
       });
       conv.updatedAt = new Date().toISOString();
-      
-      // Initialize streaming response UI
-      this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
       
       // Generate unique request ID
       const requestId = 'summarize_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
       
       // Store stream info
       this.activeStreams.set(requestId, {
-        containerId: 'pageResponse',
-        contentId: 'pageResponseContent',
-        buttonId: 'summarizePage'
+        tabName: 'page',
+        messageIndex: messageIndex,
+        buttonId: 'summarizePage',
+        accumulatedResponse: ''
       });
       
       // Create summarization prompt
@@ -544,27 +744,32 @@ class PopupController {
         this.createNewConversation('page');
       }
       
+      // Add user question to chat UI
+      this.addMessageToChat('page', question, true);
+      
+      // Add streaming indicator
+      this.addStreamingIndicator('page');
+      
       // Save to active conversation
       const conv = this.getActiveConversation('page');
+      const messageIndex = conv.messages.length;
       conv.messages.push({
         type: 'question',
         prompt: question,
-        response: null,
+        response: '',
         timestamp: new Date().toISOString()
       });
       conv.updatedAt = new Date().toISOString();
-      
-      // Initialize streaming response UI
-      this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
       
       // Generate unique request ID
       const requestId = 'question_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
       
       // Store stream info
       this.activeStreams.set(requestId, {
-        containerId: 'pageResponse',
-        contentId: 'pageResponseContent',
-        buttonId: 'askPageQuestion'
+        tabName: 'page',
+        messageIndex: messageIndex,
+        buttonId: 'askPageQuestion',
+        accumulatedResponse: ''
       });
       
       console.log('Sending page question, content length:', this.currentPageContent.length);
@@ -854,13 +1059,30 @@ class PopupController {
     const conversation = this.conversations[tabName].list.find(c => c.id === activeId);
     if (!conversation || !conversation.messages || conversation.messages.length === 0) return;
     
-    // Show last message
-    const lastMessage = conversation.messages[conversation.messages.length - 1];
-    if (lastMessage.response) {
-      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
-      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
-      this.showResponse(containerId, contentId, lastMessage.response);
-    }
+    // Clear chat container first
+    this.clearChatContainer(tabName);
+    
+    // Display all messages in order
+    conversation.messages.forEach((message, index) => {
+      // Add user message/prompt
+      if (message.prompt) {
+        // For page tab, format differently based on type
+        if (tabName === 'page') {
+          if (message.type === 'summarize') {
+            this.addMessageToChat(tabName, '📄 Summarize this page', true);
+          } else {
+            this.addMessageToChat(tabName, message.prompt, true);
+          }
+        } else {
+          this.addMessageToChat(tabName, message.prompt, true);
+        }
+      }
+      
+      // Add AI response if it exists
+      if (message.response) {
+        this.addMessageToChat(tabName, message.response, false);
+      }
+    });
   }
 
   generateConversationId() {
@@ -901,17 +1123,8 @@ class PopupController {
       // Create new conversation
       this.createNewConversation(tabName);
       
-      // Clear UI
-      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
-      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
-      
-      const container = document.getElementById(containerId);
-      const contentElement = document.getElementById(contentId);
-      
-      contentElement.innerHTML = '';
-      contentElement.dataset.originalText = '';
-      contentElement.dataset.streamingContent = '';
-      container.style.display = 'none';
+      // Clear chat container
+      this.clearChatContainer(tabName);
       
       // Save to storage
       await this.saveConversationHistory();
@@ -951,17 +1164,8 @@ class PopupController {
       // Clear from storage
       await this.saveConversationHistory();
       
-      // Clear UI
-      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
-      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
-      
-      const container = document.getElementById(containerId);
-      const contentElement = document.getElementById(contentId);
-      
-      contentElement.innerHTML = '';
-      contentElement.dataset.originalText = '';
-      contentElement.dataset.streamingContent = '';
-      container.style.display = 'none';
+      // Clear chat container
+      this.clearChatContainer(tabName);
       
       // Show success message
       const successDiv = document.createElement('div');

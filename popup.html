@@ -35,25 +35,8 @@
         </button>
       </div>
       
-      <div class="response-section">
-        <div id="promptResponse" class="response-box" style="display: none;">
-          <div class="response-header">
-            <span class="response-label">AI Response</span>
-            <div class="response-actions">
-              <button class="clear-button" id="clearPromptResponse" title="Clear conversation">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                </svg>
-              </button>
-              <button class="copy-button" id="copyPromptResponse" title="Copy to clipboard">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="response-content" id="promptResponseContent"></div>
-        </div>
+      <div class="chat-container" id="promptChatContainer">
+        <!-- Messages will be dynamically added here -->
       </div>
     </div>
 
@@ -83,25 +66,8 @@
         </button>
       </div>
 
-      <div class="response-section">
-        <div id="pageResponse" class="response-box" style="display: none;">
-          <div class="response-header">
-            <span class="response-label">AI Response</span>
-            <div class="response-actions">
-              <button class="clear-button" id="clearPageResponse" title="Clear conversation">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                </svg>
-              </button>
-              <button class="copy-button" id="copyPageResponse" title="Copy to clipboard">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="response-content" id="pageResponseContent"></div>
-        </div>
+      <div class="chat-container" id="pageChatContainer">
+        <!-- Messages will be dynamically added here -->
       </div>
     </div>
 
