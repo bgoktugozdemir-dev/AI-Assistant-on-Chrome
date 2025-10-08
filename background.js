@@ -39,20 +39,52 @@ class GeminiNanoService {
 
       // Create a session (this may trigger download if needed)
       try {
-        const params = await LanguageModel.params();
+        let temperature = 0.8;
+        let topK = 3;
+        
+        try {
+          const params = await LanguageModel.params();
+          console.log('LanguageModel params:', params);
+          
+          // Validate and clamp parameters to safe values
+          if (params.defaultTemperature && params.maxTemperature) {
+            temperature = Math.max(
+              0.0,
+              Math.min(
+                params.defaultTemperature * 1.1,
+                params.maxTemperature || 1.0
+              )
+            );
+          }
+          
+          // topK must be a positive integer, typically between 1 and 40
+          if (typeof params.defaultTopK === 'number' && !isNaN(params.defaultTopK) && params.defaultTopK >= 1) {
+            topK = Math.max(1, Math.min(Math.floor(params.defaultTopK), 40));
+          } else {
+            console.warn('Invalid defaultTopK:', params.defaultTopK, 'using default value 3');
+          }
+        } catch (paramsError) {
+          console.warn('Failed to get model params, using safe defaults:', paramsError.message);
+        }
+        
+        console.log('Creating session with temperature:', temperature, 'topK:', topK);
+        
         this.session = await LanguageModel.create({
-          temperature: Math.min(params.defaultTemperature * 1.1, params.maxTemperature),
-          topK: params.defaultTopK,
+          temperature: temperature,
+          topK: topK,
           monitor(m) {
             m.addEventListener('downloadprogress', (e) => {
-              // console.log(`Model download progress: ${Math.round(e.loaded * 100)}%`);
+              console.log(`Model download progress: ${Math.round(e.loaded * 100)}%`);
             });
           }
         });
+        
+        console.log('Session created successfully');
       } catch (sessionError) {
+        console.error('Session creation error:', sessionError);
         if (sessionError.message?.includes('download') || sessionError.message?.includes('user activation')) {
           const message = 'Model is downloading or requires user interaction. Please try again.';
-          // console.log(message);
+          console.log(message);
           return { success: false, error: 'MODEL_DOWNLOADING', message };
         }
         throw sessionError;
