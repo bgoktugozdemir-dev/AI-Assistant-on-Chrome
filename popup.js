@@ -95,14 +95,31 @@ class PopupController {
     this.currentPageContent = '';
     this.streamingPort = null;
     this.activeStreams = new Map(); // Track active streaming requests
+    
+    // New structure: multiple conversations per tab
+    this.conversations = {
+      prompt: {
+        active: null,  // ID of active conversation
+        list: []       // Array of conversations
+      },
+      page: {
+        active: null,
+        list: []
+      }
+    };
+    
     this.init();
   }
 
   async init() {
     this.setupEventListeners();
     this.setupStreaming();
+    await this.loadConversationHistory();
     await this.initializeAI();
     await this.loadCurrentPageInfo();
+    
+    // Show the new chat button for the active tab (default is prompt)
+    document.getElementById('newPromptChat').style.display = 'flex';
   }
 
   setupStreaming() {
@@ -198,6 +215,22 @@ class PopupController {
     document.getElementById('copyPageResponse').addEventListener('click', () => {
       this.copyToClipboard('pageResponseContent');
     });
+
+    // Clear buttons
+    document.getElementById('clearPromptResponse').addEventListener('click', () => {
+      this.clearConversation('prompt');
+    });
+    document.getElementById('clearPageResponse').addEventListener('click', () => {
+      this.clearConversation('page');
+    });
+
+    // New chat buttons
+    document.getElementById('newPromptChat').addEventListener('click', () => {
+      this.startNewConversation('prompt');
+    });
+    document.getElementById('newPageChat').addEventListener('click', () => {
+      this.startNewConversation('page');
+    });
   }
 
   switchTab(tabName) {
@@ -212,6 +245,10 @@ class PopupController {
       content.classList.remove('active');
     });
     document.getElementById(`${tabName}Tab`).classList.add('active');
+
+    // Show/hide appropriate new chat button
+    document.getElementById('newPromptChat').style.display = tabName === 'prompt' ? 'flex' : 'none';
+    document.getElementById('newPageChat').style.display = tabName === 'page' ? 'flex' : 'none';
 
     this.currentTab = tabName;
   }
@@ -376,6 +413,21 @@ class PopupController {
     try {
       this.setButtonLoading('sendPrompt', true);
       
+      // Get active conversation
+      const activeConv = this.getActiveConversation('prompt');
+      if (!activeConv) {
+        this.createNewConversation('prompt');
+      }
+      
+      // Save prompt to active conversation
+      const conv = this.getActiveConversation('prompt');
+      conv.messages.push({
+        prompt: prompt,
+        response: null,
+        timestamp: new Date().toISOString()
+      });
+      conv.updatedAt = new Date().toISOString();
+      
       // Initialize streaming response UI
       this.initializeStreamingResponse('promptResponse', 'promptResponseContent');
       
@@ -418,6 +470,22 @@ class PopupController {
 
     try {
       this.setButtonLoading('summarizePage', true);
+      
+      // Get active conversation
+      const activeConv = this.getActiveConversation('page');
+      if (!activeConv) {
+        this.createNewConversation('page');
+      }
+      
+      // Save to active conversation
+      const conv = this.getActiveConversation('page');
+      conv.messages.push({
+        type: 'summarize',
+        prompt: 'Summarize page',
+        response: null,
+        timestamp: new Date().toISOString()
+      });
+      conv.updatedAt = new Date().toISOString();
       
       // Initialize streaming response UI
       this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
@@ -469,6 +537,22 @@ class PopupController {
 
     try {
       this.setButtonLoading('askPageQuestion', true);
+      
+      // Get active conversation
+      const activeConv = this.getActiveConversation('page');
+      if (!activeConv) {
+        this.createNewConversation('page');
+      }
+      
+      // Save to active conversation
+      const conv = this.getActiveConversation('page');
+      conv.messages.push({
+        type: 'question',
+        prompt: question,
+        response: null,
+        timestamp: new Date().toISOString()
+      });
+      conv.updatedAt = new Date().toISOString();
       
       // Initialize streaming response UI
       this.initializeStreamingResponse('pageResponse', 'pageResponseContent');
@@ -571,6 +655,21 @@ class PopupController {
       contentElement.dataset.originalText = fullContent;
       const htmlContent = MarkdownRenderer.render(fullContent);
       contentElement.innerHTML = htmlContent;
+      
+      // Save to active conversation
+      const tabName = containerId === 'promptResponse' ? 'prompt' : 'page';
+      if (fullContent) {
+        const activeConv = this.getActiveConversation(tabName);
+        if (activeConv && activeConv.messages.length > 0) {
+          // Update the last message with the response
+          const lastMessage = activeConv.messages[activeConv.messages.length - 1];
+          lastMessage.response = fullContent;
+          lastMessage.timestamp = new Date().toISOString();
+          activeConv.updatedAt = new Date().toISOString();
+        }
+        this.saveConversationHistory();
+      }
+      
       return;
     }
     
@@ -684,6 +783,207 @@ class PopupController {
         reject(error);
       }
     });
+  }
+
+  async loadConversationHistory() {
+    try {
+      const result = await chrome.storage.local.get(['conversations']);
+      if (result.conversations) {
+        this.conversations = result.conversations;
+        console.log('Loaded conversations:', this.conversations);
+      } else {
+        // Migrate old format if exists
+        const oldResult = await chrome.storage.local.get(['conversationHistory']);
+        if (oldResult.conversationHistory) {
+          console.log('Migrating old conversation format...');
+          this.migrateOldFormat(oldResult.conversationHistory);
+        }
+      }
+      
+      // Create initial conversation if none exists
+      if (!this.conversations.prompt.active && this.conversations.prompt.list.length === 0) {
+        this.createNewConversation('prompt');
+      }
+      if (!this.conversations.page.active && this.conversations.page.list.length === 0) {
+        this.createNewConversation('page');
+      }
+      
+      // Restore active conversations
+      this.restoreActiveConversation('prompt');
+      this.restoreActiveConversation('page');
+      
+    } catch (error) {
+      console.error('Failed to load conversation history:', error);
+      // Initialize with empty conversations
+      this.createNewConversation('prompt');
+      this.createNewConversation('page');
+    }
+  }
+
+  migrateOldFormat(oldHistory) {
+    // Convert old flat array format to new conversation format
+    if (oldHistory.prompt && oldHistory.prompt.length > 0) {
+      const convId = this.generateConversationId();
+      this.conversations.prompt.list.push({
+        id: convId,
+        messages: oldHistory.prompt,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      this.conversations.prompt.active = convId;
+    }
+    
+    if (oldHistory.page && oldHistory.page.length > 0) {
+      const convId = this.generateConversationId();
+      this.conversations.page.list.push({
+        id: convId,
+        messages: oldHistory.page,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      this.conversations.page.active = convId;
+    }
+    
+    this.saveConversationHistory();
+  }
+
+  restoreActiveConversation(tabName) {
+    const activeId = this.conversations[tabName].active;
+    if (!activeId) return;
+    
+    const conversation = this.conversations[tabName].list.find(c => c.id === activeId);
+    if (!conversation || !conversation.messages || conversation.messages.length === 0) return;
+    
+    // Show last message
+    const lastMessage = conversation.messages[conversation.messages.length - 1];
+    if (lastMessage.response) {
+      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
+      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
+      this.showResponse(containerId, contentId, lastMessage.response);
+    }
+  }
+
+  generateConversationId() {
+    return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  createNewConversation(tabName) {
+    const convId = this.generateConversationId();
+    const newConv = {
+      id: convId,
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    this.conversations[tabName].list.push(newConv);
+    this.conversations[tabName].active = convId;
+    
+    console.log(`Created new conversation for ${tabName}:`, convId);
+  }
+
+  getActiveConversation(tabName) {
+    const activeId = this.conversations[tabName].active;
+    return this.conversations[tabName].list.find(c => c.id === activeId);
+  }
+
+  async saveConversationHistory() {
+    try {
+      await chrome.storage.local.set({ conversations: this.conversations });
+      console.log('Saved conversations');
+    } catch (error) {
+      console.error('Failed to save conversation history:', error);
+    }
+  }
+
+  async startNewConversation(tabName) {
+    try {
+      // Create new conversation
+      this.createNewConversation(tabName);
+      
+      // Clear UI
+      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
+      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
+      
+      const container = document.getElementById(containerId);
+      const contentElement = document.getElementById(contentId);
+      
+      contentElement.innerHTML = '';
+      contentElement.dataset.originalText = '';
+      contentElement.dataset.streamingContent = '';
+      container.style.display = 'none';
+      
+      // Save to storage
+      await this.saveConversationHistory();
+      
+      // Show success message
+      const successDiv = document.createElement('div');
+      successDiv.className = 'success-message';
+      successDiv.textContent = '✨ New conversation started!';
+      
+      const activeTab = document.querySelector('.tab-content.active');
+      if (activeTab) {
+        activeTab.insertBefore(successDiv, activeTab.firstChild);
+        
+        setTimeout(() => {
+          if (successDiv.parentNode) {
+            successDiv.remove();
+          }
+        }, 2000);
+      }
+      
+      console.log(`Started new ${tabName} conversation`);
+    } catch (error) {
+      console.error('Failed to start new conversation:', error);
+      this.showError('Failed to start new conversation');
+    }
+  }
+
+  async clearConversation(tabName) {
+    try {
+      const activeConv = this.getActiveConversation(tabName);
+      if (activeConv) {
+        // Clear messages in active conversation
+        activeConv.messages = [];
+        activeConv.updatedAt = new Date().toISOString();
+      }
+      
+      // Clear from storage
+      await this.saveConversationHistory();
+      
+      // Clear UI
+      const containerId = tabName === 'prompt' ? 'promptResponse' : 'pageResponse';
+      const contentId = tabName === 'prompt' ? 'promptResponseContent' : 'pageResponseContent';
+      
+      const container = document.getElementById(containerId);
+      const contentElement = document.getElementById(contentId);
+      
+      contentElement.innerHTML = '';
+      contentElement.dataset.originalText = '';
+      contentElement.dataset.streamingContent = '';
+      container.style.display = 'none';
+      
+      // Show success message
+      const successDiv = document.createElement('div');
+      successDiv.className = 'success-message';
+      successDiv.textContent = 'Conversation cleared!';
+      
+      const activeTab = document.querySelector('.tab-content.active');
+      if (activeTab) {
+        activeTab.insertBefore(successDiv, activeTab.firstChild);
+        
+        setTimeout(() => {
+          if (successDiv.parentNode) {
+            successDiv.remove();
+          }
+        }, 2000);
+      }
+      
+      console.log(`Cleared ${tabName} conversation`);
+    } catch (error) {
+      console.error('Failed to clear conversation:', error);
+      this.showError('Failed to clear conversation');
+    }
   }
 }
 
